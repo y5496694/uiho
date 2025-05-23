@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>전일제 강사 급여 계산기</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 950px; margin: auto; background-color: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; text-align: center; }
+        .controls { margin-bottom: 25px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
+        .controls label { font-weight: bold; }
+        .controls select, .controls button {
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 1em;
+        }
+        .controls button {
+            background-color: #3498db;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .controls button:hover { background-color: #2980b9; }
+        .calendar-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .calendar-table th, .calendar-table td {
+            border: 1px solid #e0e0e0;
+            padding: 10px;
+            text-align: center;
+            vertical-align: top;
+            height: 110px;
+            font-size: 0.9em;
+        }
+        .calendar-table th { background-color: #ecf0f1; color: #34495e; font-weight: bold; }
+        .day-number { font-weight: bold; display: block; margin-bottom: 8px; font-size: 1.1em; color: #555; }
+        .saturday .day-number { color: #3498db; }
+        .sunday .day-number { color: #e74c3c; }
+        .holiday { background-color: #fff9e6; }
+        .holiday .day-number { color: #f39c12; }
+        .disabled-day { color: #bbb; }
+        .other-month .day-number { color: #ccc; }
+        .work-input select, .work-input input[type="checkbox"] { margin-top: 5px; display: block; width: calc(100% - 10px); margin-left: auto; margin-right: auto; font-size:0.9em; padding: 3px; box-sizing: border-box;}
+        .work-input label { font-size: 0.85em; }
+        .results { margin-top: 30px; padding: 20px; border: 1px solid #ddd; background-color: #fdfdfd; border-radius: 5px; }
+        .results h3 { margin-top: 0; color: #3498db; }
+        .results p { font-size: 1.1em; margin: 10px 0; }
+        .results strong { color: #2c3e50; }
+        .previous-month-days { margin-bottom: 20px; padding: 15px; border: 1px dashed #bdc3c7; background-color: #f8f9f9; border-radius: 5px; }
+        .previous-month-days h4 { margin-top: 0; color: #7f8c8d; }
+        .previous-month-days div { margin-bottom: 8px; }
+        #holiday-allowance-details { list-style-type: none; padding-left: 0; }
+        #holiday-allowance-details li { background-color: #f9f9f9; margin-bottom: 8px; padding: 10px; border-radius: 4px; border-left: 3px solid #3498db; font-size: 0.9em;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>전일제 강사 급여 계산기 (2025년)</h1>
+        <p><strong>안내:</strong> 이 계산기는 2025년 3월 1일부터 12월 31일까지의 기간에 대해, 하루 8시간 근무를 기준으로 전일제 강사의 급여를 계산합니다. 주휴수당은 해당 주(토~금)의 월~금요일 중 공휴일을 제외한 모든 근무일에 출근 시, 해당 주 월~금 근무수당 합계의 1/5로 계산됩니다.</p>
+
+        <div class="controls">
+            <label for="month-select">월 선택:</label>
+            <select id="month-select">
+                </select>
+            <button id="calculate-salary">급여 계산</button>
+        </div>
+
+        <div id="previous-month-days-input" class="previous-month-days" style="display:none;">
+            <h4>이전 달 근무 입력 (현재 월 주휴수당 계산용)</h4>
+            </div>
+
+        <div id="calendar-container">
+            <h3 id="calendar-title" style="text-align:center; color: #34495e;"></h3>
+            <table class="calendar-table">
+                <thead>
+                    <tr>
+                        <th>토 (Sat)</th>
+                        <th>일 (Sun)</th>
+                        <th>월 (Mon)</th>
+                        <th>화 (Tue)</th>
+                        <th>수 (Wed)</th>
+                        <th>목 (Thu)</th>
+                        <th>금 (Fri)</th>
+                    </tr>
+                </thead>
+                <tbody id="calendar-body">
+                    </tbody>
+            </table>
+        </div>
+
+        <div id="salary-results" class="results" style="display:none;">
+            <h3>급여 계산 결과</h3>
+            <p id="total-daily-allowance"><strong>총 근무수당:</strong> </p>
+            <p id="total-holiday-allowance"><strong>총 주휴수당:</strong> </p>
+            <p id="total-salary" style="font-size: 1.3em;"><strong>월 급여 합계:</strong> </p>
+            <h4>주휴수당 상세 내역:</h4>
+            <ul id="holiday-allowance-details"></ul>
+        </div>
+    </div>
+
+    <script>
+        // 학교 정보 및 수당 (제공된 PDF 기반)
+        const schoolsData = [
+            { name: "고북초등학교", allowance: 140000, type: "면" }, { name: "가사초등학교", allowance: 140000, type: "면" },
+            { name: "강당초등학교", allowance: 140000, type: "면" }, { name: "부석초등학교", allowance: 140000, type: "면" },
+            { name: "성연초등학교", allowance: 140000, type: "면" }, { name: "운산초등학교", allowance: 140000, type: "면" },
+            { name: "운신초등학교", allowance: 140000, type: "면" }, { name: "음암초등학교", allowance: 140000, type: "면" },
+            { name: "동암초등학교", allowance: 140000, type: "면" }, { name: "인지초등학교", allowance: 140000, type: "면" },
+            { name: "차동초등학교", allowance: 140000, type: "면" }, { name: "부성초등학교", allowance: 140000, type: "면" },
+            { name: "팔봉초등학교", allowance: 140000, type: "면" }, { name: "언암초등학교", allowance: 140000, type: "면" },
+            { name: "해미초등학교", allowance: 140000, type: "면" }, { name: "서령초등학교", allowance: 120000, type: "시" },
+            { name: "서림초등학교", allowance: 120000, type: "시" }, { name: "오산초등학교", allowance: 120000, type: "시" },
+            { name: "서산석림초등학교", allowance: 120000, type: "시" }, { name: "학돌초등학교", allowance: 120000, type: "시" },
+            { name: "서동초등학교", allowance: 120000, type: "시" }, { name: "서산동문초등학교", allowance: 120000, type: "시" },
+            { name: "부춘초등학교", allowance: 120000, type: "시" }, { name: "서산예천초등학교", allowance: 120000, type: "시" },
+            { name: "서산서남초등학교", allowance: 120000, type: "시" }, { name: "서산초등학교", allowance: 120000, type: "시" },
+            { name: "대산초등학교", allowance: 130000, type: "읍" }, { name: "서산대진초등학교", allowance: 130000, type: "읍" },
+            { name: "명지초등학교", allowance: 130000, type: "읍" }, { name: "서산교육지원청", allowance: 120000, type: "시" }
+        ];
+
+        // 2025년 대한민국 공휴일 (3월 ~ 12월)
+        const publicHolidays2025 = {
+            3: [], // 3.1절은 토요일
+            5: [5], // 어린이날 (월) - 부처님오신날과 겹치나, 어린이날이 우선 적용됨 (대체공휴일 없음)
+            6: [6], // 현충일 (금)
+            8: [15], // 광복절 (금)
+            10: [3, 6, 7, 8, 9], // 개천절(금), 추석연휴(월,화,수), 한글날(목) - 추석 대체공휴일은 8일(수)
+            12: [25] // 크리스마스 (목)
+        };
+        // 참고: 2025년 부처님오신날은 5월 5일(월)로 어린이날과 동일. 공휴일에 관한 법률에 따라 하나의 공휴일로 처리.
+
+        const monthSelect = document.getElementById('month-select');
+        const calendarBody = document.getElementById('calendar-body');
+        const calendarTitle = document.getElementById('calendar-title');
+        const calculateButton = document.getElementById('calculate-salary');
+        const salaryResultsDiv = document.getElementById('salary-results');
+        const totalDailyAllowanceEl = document.getElementById('total-daily-allowance');
+        const totalHolidayAllowanceEl = document.getElementById('total-holiday-allowance');
+        const totalSalaryEl = document.getElementById('total-salary');
+        const holidayAllowanceDetailsEl = document.getElementById('holiday-allowance-details');
+        const previousMonthDaysInputDiv = document.getElementById('previous-month-days-input');
+
+        const currentYear = 2025;
+        // 근무 기간: 2025.3.1 ~ 2025.12.31 (month는 0-indexed: 2는 3월, 11은 12월)
+        const validMonths = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]; 
+
+        function initMonthSelector() {
+            const monthNames = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
+            validMonths.forEach(monthIndex => {
+                const option = document.createElement('option');
+                option.value = monthIndex;
+                option.textContent = `${currentYear}년 ${monthNames[monthIndex]}`;
+                monthSelect.appendChild(option);
+            });
+            if (monthSelect.options.length > 0) {
+                 monthSelect.value = validMonths[0]; // 기본값: 3월
+            }
+            monthSelect.addEventListener('change', renderCalendar);
+        }
+
+        function isPublicHoliday(year, month, day) { // month는 0-indexed
+            return publicHolidays2025[month + 1] && publicHolidays2025[month + 1].includes(day);
+        }
+
+        function getSchoolSelector(dateStr, isPrevMonth = false) {
+            const selectId = `school-${dateStr}`;
+            let selectHtml = `<select id="${selectId}" data-date="${dateStr}" ${isPrevMonth ? 'data-prev-month="true"' : ''}>`;
+            selectHtml += `<option value="">학교 선택</option>`;
+            schoolsData.forEach(school => {
+                selectHtml += `<option value="${school.allowance}">${school.name} (${school.allowance.toLocaleString()}원)</option>`;
+            });
+            selectHtml += `</select>`;
+            return selectHtml;
+        }
+        
+        function createDayCellContent(dateObj, year, month) { // dateObj is a Date object
+            const day = dateObj.getDate();
+            const dayOfWeek = dateObj.getDay(); // 0 (Sun) to 6 (Sat)
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+            let cellClass = '';
+            let content = `<span class="day-number">${day}</span>`;
+            
+            // 계약 시작일(2025.3.1) 및 종료일(2025.12.31) 확인
+            const contractStart = new Date(2025, 2, 1); // March 1, 2025 (month is 0-indexed)
+            const contractEnd = new Date(2025, 11, 31); // December 31, 2025
+            const isWithinContract = dateObj >= contractStart && dateObj <= contractEnd;
+
+            if (dayOfWeek === 6) cellClass = 'saturday'; 
+            else if (dayOfWeek === 0) cellClass = 'sunday'; 
+
+            if (!isWithinContract) {
+                cellClass += (cellClass ? ' ' : '') + 'disabled-day other-month'; // 계약 외 기간은 비활성화 처리 느낌
+                content += '<span class="disabled-day">-</span>';
+            } else if (isPublicHoliday(year, month, day)) {
+                cellClass += (cellClass ? ' ' : '') + 'holiday';
+                content += '공휴일';
+            } else if (dayOfWeek !== 0 && dayOfWeek !== 6) { // 평일이고 공휴일 아님
+                content += `<div class="work-input">
+                                <input type="checkbox" id="work-${dateStr}" data-date="${dateStr}"> <label for="work-${dateStr}">근무</label>
+                                ${getSchoolSelector(dateStr)}
+                            </div>`;
+            } else { // 주말 (공휴일이 아닌 경우)
+                 content += '<span class="disabled-day">-</span>';
+            }
+            return { content, cellClass, dateStr };
+        }
+
+        function renderCalendar() {
+            const selectedMonth = parseInt(monthSelect.value); // 0-indexed
+            calendarTitle.textContent = `${currentYear}년 ${selectedMonth + 1}월`;
+            calendarBody.innerHTML = '';
+            previousMonthDaysInputDiv.innerHTML = '<h4>이전 달 근무 입력 (현재 월 주휴수당 계산용)</h4>';
+            previousMonthDaysInputDiv.style.display = 'none';
+
+            const firstDayOfSelectedMonth = new Date(currentYear, selectedMonth, 1);
+            const lastDayOfSelectedMonth = new Date(currentYear, selectedMonth + 1, 0);
+
+            // 달력 표시는 토요일부터 시작
+            let calendarStartDate = new Date(firstDayOfSelectedMonth);
+            calendarStartDate.setDate(calendarStartDate.getDate() - (calendarStartDate.getDay() + 1 + 7) % 7);
+
+
+            // 이전 달 근무일 입력 섹션 처리
+            let needsPrevMonthInput = false;
+            const prevMonthDaysToQuery = [];
+            const firstFridayOfSelectedMonth = new Date(currentYear, selectedMonth, 1);
+            while(firstFridayOfSelectedMonth.getDay() !== 5) { // 해당 월의 첫 금요일 찾기
+                firstFridayOfSelectedMonth.setDate(firstFridayOfSelectedMonth.getDate() + 1);
+                if (firstFridayOfSelectedMonth.getMonth() !== selectedMonth) break; 
+            }
+
+            if (firstFridayOfSelectedMonth.getMonth() === selectedMonth) {
+                let mondayOfFirstWeek = new Date(firstFridayOfSelectedMonth);
+                mondayOfFirstWeek.setDate(mondayOfFirstWeek.getDate() - 4); // 그 주의 월요일
+
+                while(mondayOfFirstWeek.getMonth() < selectedMonth || (mondayOfFirstWeek.getFullYear() < currentYear) ) {
+                    // 계약 시작일(2025.3.1) 이전은 제외
+                    const contractStart = new Date(2025, 2, 1);
+                    if (mondayOfFirstWeek < contractStart) {
+                        mondayOfFirstWeek.setDate(mondayOfFirstWeek.getDate() + 1);
+                        continue;
+                    }
+
+                    if (mondayOfFirstWeek.getDay() >= 1 && mondayOfFirstWeek.getDay() <= 5) { // 월~금
+                        prevMonthDaysToQuery.unshift(new Date(mondayOfFirstWeek)); 
+                    }
+                    mondayOfFirstWeek.setDate(mondayOfFirstWeek.getDate() + 1);
+                    if (prevMonthDaysToQuery.length >= 5) break;
+                }
+            }
+            
+            prevMonthDaysToQuery.forEach(date => {
+                const day = date.getDate();
+                const month = date.getMonth(); // 0-indexed
+                const year = date.getFullYear();
+                const dayOfWeek = date.getDay();
+
+                if (isPublicHoliday(year, month, day) || dayOfWeek === 0 || dayOfWeek === 6) return;
+
+                needsPrevMonthInput = true;
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dayLabel = `${month + 1}월 ${day}일 (${['일', '월', '화', '수', '목', '금', '토'][dayOfWeek]})`;
+                
+                const inputHtml = `<div>
+                    <label for="work-${dateStr}">${dayLabel}:</label>
+                    <input type="checkbox" id="work-${dateStr}" data-date="${dateStr}" data-prev-month="true"> <label for="work-${dateStr}" style="font-size:0.9em; margin-left:5px;">근무</label>
+                    ${getSchoolSelector(dateStr, true)}
+                </div>`;
+                previousMonthDaysInputDiv.innerHTML += inputHtml;
+            });
+
+            if (needsPrevMonthInput) {
+                previousMonthDaysInputDiv.style.display = 'block';
+            }
+
+            // 달력 그리기
+            let currentDayIter = new Date(calendarStartDate);
+            for (let i = 0; i < 6; i++) { // 최대 6주 표시
+                let row = calendarBody.insertRow();
+                let allCellsNextMonth = true;
+                for (let j = 0; j < 7; j++) { // 토요일부터 금요일까지 (0=토, 1=일 ... 6=금 순서로 표시)
+                    let cell = row.insertCell();
+                    const day = currentDayIter.getDate();
+                    const month = currentDayIter.getMonth();
+                    const year = currentDayIter.getFullYear();
+                    
+                    if (month === selectedMonth && year === currentYear) {
+                        allCellsNextMonth = false;
+                        const { content, cellClass } = createDayCellContent(new Date(currentDayIter), year, month);
+                        cell.innerHTML = content;
+                        if (cellClass) cell.className = cellClass;
+                    } else {
+                        cell.innerHTML = `<span class="day-number other-month-day">${day}</span>`;
+                        cell.className = 'other-month';
+                         if (currentDayIter > lastDayOfSelectedMonth && month > selectedMonth) {
+                            // Keep it, it's for the next month display
+                        } else {
+                             cell.classList.add('disabled-day'); // Previous month's trailing days
+                        }
+                    }
+                    currentDayIter.setDate(currentDayIter.getDate() + 1);
+                }
+                if (allCellsNextMonth && currentDayIter > lastDayOfSelectedMonth && currentDayIter.getMonth() !== selectedMonth) {
+                     // If the entire row is for the next month and we are past the selected month's end.
+                    if (i > 3) { // Only hide if it's clearly an unnecessary trailing week
+                        row.style.display = 'none';
+                        break;
+                    }
+                }
+                if (currentDayIter > lastDayOfSelectedMonth && currentDayIter.getMonth() !== selectedMonth && i >=3) {
+                    // Stop if we've rendered enough weeks and are into the next month
+                    const tempDateCheck = new Date(currentDayIter);
+                    tempDateCheck.setDate(tempDateCheck.getDate() - 7); // Start of this week
+                    if (tempDateCheck > lastDayOfSelectedMonth) break;
+                }
+            }
+            salaryResultsDiv.style.display = 'none';
+        }
+
+        function getWorkDataForDate(dateStr) {
+            const workedCheckbox = document.getElementById(`work-${dateStr}`);
+            const schoolSelect = document.getElementById(`school-${dateStr}`);
+            if (workedCheckbox && workedCheckbox.checked && schoolSelect && schoolSelect.value) {
+                return {
+                    worked: true,
+                    allowance: parseInt(schoolSelect.value),
+                    schoolName: schoolSelect.options[schoolSelect.selectedIndex].text.split(' (')[0]
+                };
+            }
+            return { worked: false, allowance: 0, schoolName: null };
+        }
+
+        calculateButton.addEventListener('click', () => {
+            const selectedMonth = parseInt(monthSelect.value); // 0-indexed
+            let totalDailyAllowance = 0;
+            let totalHolidayAllowance = 0;
+            holidayAllowanceDetailsEl.innerHTML = '';
+
+            const contractStart = new Date(2025, 2, 1); // March 1
+            const contractEnd = new Date(2025, 11, 31); // Dec 31
+
+            // 1. 선택된 달의 총 근무수당 계산
+            const daysInSelectedMonth = new Date(currentYear, selectedMonth + 1, 0).getDate();
+            for (let day = 1; day <= daysInSelectedMonth; day++) {
+                const currentDate = new Date(currentYear, selectedMonth, day);
+                if (currentDate < contractStart || currentDate > contractEnd) continue; // 계약 기간 외
+
+                const dayOfWeek = currentDate.getDay();
+                const dateStr = `${currentYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                
+                if (dayOfWeek !== 0 && dayOfWeek !== 6 && !isPublicHoliday(currentYear, selectedMonth, day)) {
+                    const workData = getWorkDataForDate(dateStr);
+                    if (workData.worked) {
+                        totalDailyAllowance += workData.allowance;
+                    }
+                }
+            }
+
+            // 2. 주휴수당 계산 (토~금 기준, 금요일이 해당 월에 속하는 주)
+            let currentSaturday = new Date(currentYear, selectedMonth, 1);
+            currentSaturday.setDate(1); // 해당 월의 1일로 설정
+            while (currentSaturday.getDay() !== 6) { // 해당 월 1일 이전의 가장 가까운 토요일 찾기
+                currentSaturday.setDate(currentSaturday.getDate() - 1);
+            }
+            // 만약 3월이고 currentSaturday가 2월이면, 3월 1일로 강제 시작 (계약 시작일 고려)
+            if (selectedMonth === 2 && currentSaturday < contractStart) {
+                currentSaturday = new Date(contractStart);
+                 while (currentSaturday.getDay() !== 6) { 
+                    currentSaturday.setDate(currentSaturday.getDate() - 1);
+                }
+            }
+
+
+            while (true) {
+                const currentFriday = new Date(currentSaturday);
+                currentFriday.setDate(currentSaturday.getDate() + 6);
+
+                // 주의 금요일이 선택된 달에 속하거나, 다음달 초이면서 주의 시작(토요일)이 선택된 달에 있는 경우 처리
+                // (예: 3월 29일(토) ~ 4월 4일(금) 주의 주휴수당은 4월에 계산)
+                if (!((currentFriday.getFullYear() === currentYear && currentFriday.getMonth() === selectedMonth) ||
+                      (currentSaturday.getFullYear() === currentYear && currentSaturday.getMonth() === selectedMonth && currentFriday.getMonth() === selectedMonth + 1) )) {
+                    if (currentSaturday > new Date(currentYear, selectedMonth +1, 0) ) break; // 다음달로 너무 많이 넘어가면 중단
+                    currentSaturday.setDate(currentSaturday.getDate() + 7);
+                    continue;
+                }
+                 if (currentFriday > contractEnd && currentSaturday > contractEnd) break; // 계약 종료일 이후 주간은 계산 안함
+
+
+                let mondayOfWeek = new Date(currentSaturday);
+                mondayOfWeek.setDate(currentSaturday.getDate() + 2); // 해당 주의 월요일
+
+                let weeklyMonFriAllowanceSum = 0;
+                let scheduledWorkdaysInMonFri = 0;
+                let actualWorkedDaysInMonFri = 0;
+                let weekDetailLog = `주간 (${currentSaturday.toLocaleDateString()} ~ ${currentFriday.toLocaleDateString()}) 월~금 근무: `;
+                
+                for (let d = 0; d < 5; d++) { // 월요일부터 금요일까지
+                    const dayInMonFri = new Date(mondayOfWeek);
+                    dayInMonFri.setDate(mondayOfWeek.getDate() + d);
+
+                    if (dayInMonFri < contractStart || dayInMonFri > contractEnd) { // 계약 기간 외
+                        weekDetailLog += `[${dayInMonFri.getDate()}일: 계약외] `;
+                        continue;
+                    }
+                    
+                    const dayInMonFri_year = dayInMonFri.getFullYear();
+                    const dayInMonFri_month = dayInMonFri.getMonth(); // 0-indexed
+                    const dayInMonFri_day = dayInMonFri.getDate();
+
+                    if (isPublicHoliday(dayInMonFri_year, dayInMonFri_month, dayInMonFri_day)) {
+                        weekDetailLog += `[${dayInMonFri_day}일: 공휴일] `;
+                        continue; 
+                    }
+                    
+                    scheduledWorkdaysInMonFri++;
+                    const dateStr = `${dayInMonFri_year}-${String(dayInMonFri_month + 1).padStart(2, '0')}-${String(dayInMonFri_day).padStart(2, '0')}`;
+                    const workData = getWorkDataForDate(dateStr);
+
+                    if (workData.worked) {
+                        actualWorkedDaysInMonFri++;
+                        weeklyMonFriAllowanceSum += workData.allowance;
+                        weekDetailLog += `[${dayInMonFri_day}일: ${workData.schoolName || '근무'} (${workData.allowance.toLocaleString()}원)] `;
+                    } else {
+                         weekDetailLog += `[${dayInMonFri_day}일: 결근/미입력] `;
+                    }
+                }
+                
+                let holidayAllowanceForThisWeek = 0;
+                if (scheduledWorkdaysInMonFri > 0 && actualWorkedDaysInMonFri === scheduledWorkdaysInMonFri) {
+                    holidayAllowanceForThisWeek = weeklyMonFriAllowanceSum / 5; // 주휴수당 = (월-금 수당합계 / 5)
+                    totalHolidayAllowance += holidayAllowanceForThisWeek;
+                    weekDetailLog += `-> <strong>주휴수당: ${holidayAllowanceForThisWeek.toLocaleString()}원</strong> (조건충족: ${actualWorkedDaysInMonFri}/${scheduledWorkdaysInMonFri} 근무, 수당합 ${weeklyMonFriAllowanceSum.toLocaleString()}원)`;
+                } else if (scheduledWorkdaysInMonFri === 0) {
+                     weekDetailLog += `-> 주휴수당: 0원 (해당 주 월~금 전체 공휴일 또는 계약외)`;
+                }
+                else {
+                    weekDetailLog += `-> 주휴수당: 0원 (조건미충족: ${actualWorkedDaysInMonFri}/${scheduledWorkdaysInMonFri} 근무)`;
+                }
+                const li = document.createElement('li');
+                li.innerHTML = weekDetailLog; // Use innerHTML for strong tag
+                holidayAllowanceDetailsEl.appendChild(li);
+                
+                currentSaturday.setDate(currentSaturday.getDate() + 7); // 다음 주로 이동
+                if (currentSaturday.getFullYear() === currentYear && currentSaturday.getMonth() > selectedMonth +1) break; // 너무 많이 다음달로 가면 중단
+                 if (currentSaturday > contractEnd) break; // 계약 종료일 이후로는 계산 중단
+            }
+
+            totalDailyAllowanceEl.innerHTML = `<strong>총 근무수당:</strong> ${totalDailyAllowance.toLocaleString()}원`;
+            totalHolidayAllowanceEl.innerHTML = `<strong>총 주휴수당:</strong> ${totalHolidayAllowance.toLocaleString()}원`;
+            totalSalaryEl.innerHTML = `<strong>월 급여 합계:</strong> ${(totalDailyAllowance + totalHolidayAllowance).toLocaleString()}원`;
+            salaryResultsDiv.style.display = 'block';
+        });
+
+        // 초기화
+        initMonthSelector();
+        renderCalendar(); 
+    </script>
+</body>
+</html>
